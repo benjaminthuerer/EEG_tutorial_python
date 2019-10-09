@@ -44,13 +44,10 @@ def detect_bad_ch(eeg):
     return good_ch, bad_ch
 
 
+# define path and filename
 filename = "sleep_sd1020_eyes_closed2_060219.vhdr"
 filepath = "/home/benjamin/Downloads/sd1020/"
 file = filepath + filename
-
-locname = "OsloLab_62channel"
-locpath = "/home/benjamin/Downloads/"
-loc_file = locpath + locname
 
 
 # 1. load data
