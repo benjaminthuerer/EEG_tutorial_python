@@ -3,10 +3,14 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 
-def plot_response(signal):
+def plot_response(signal, argument):
     """plot response to check what happened with the data"""
-    signal.plot_psd(fmin=0, fmax=80)
-    signal.plot(duration=10, remove_dc=False)
+    if "time" in argument:
+        signal.plot(duration=10, remove_dc=False)
+    if "psd" in argument:
+        signal.plot_psd(fmin=0, fmax=80)
+    if "butter" in argument:
+        signal.plot(butterfly=True, color='#00000044', bad_color='r')
 
 
 def detect_bad_ch(eeg):
@@ -53,35 +57,49 @@ file = filepath + filename
 # 1. load data
 data = mne.io.read_raw_brainvision(file)
 data.load_data()
-# plot_response(data)
+#plot_response(data, 'time')
 
 
-# 2. resample (with low-pass filter)
+# 2. TMS-artifact interpolation!!!!
+
+
+# 3. resample (with low-pass filter)
 new_sampling = 500
 data_sampled = data.copy().resample(new_sampling, npad='auto')
-# plot_response(data_sampled)
+#plot_response(data_sampled, ['time', 'psd'])
 
 
-# 3. filter (first high- then low-pass)
+# 4. filter (first high- then low-pass)
 l_cut, h_cut = 0.5, 40
 data_filtered = data_sampled.copy().filter(l_freq=l_cut, h_freq=h_cut)
-# plot_response(data_filtered)
+#plot_response(data_filtered, 'psd')
 
 
-# 4. channel info (remove EMG and set type for EOG channels)
+# 5. channel info (remove EMG and set type for EOG channels)
 data_filtered.drop_channels('EMG1')
 data_filtered.set_channel_types({'VEOGl': 'eog', 'VEOGu': 'eog'})
 data_channel = data_filtered.copy().set_montage('standard_1005')
 
 
-# 5. remove bad channels
+# 6. remove bad channels (or do not remove but track them)
 good, bad = detect_bad_ch(data_channel)
-data_rmch = data_channel.copy().drop_channels(bad)
+data_channel.info['bads'] = bad  # keep track of bad channels but do not remove (MNE style)
+# data_channel = data_channel.copy().drop_channels(bad)  # remove bad channels (eeglab style)
 
 
-# 6. interpolate channels
+# 7. interpolate channels (spherical spline method recommended)
+data_interp = data_channel.copy().interpolate_bads(reset_bads=True)  # for presentation of bad channels change to False
+plot_response(data_interp, 'butter')
 
-# 7. re-reference to average
+
+# 8. re-reference to average
+data_reref = data_interp.copy().set_eeg_reference('average', projection=False)  # for reasons you might want to go with True
+
+
+# 9. PCA (optional)
+
+
+# 10. ICA
 
 
 """create sine wave for fun"""
