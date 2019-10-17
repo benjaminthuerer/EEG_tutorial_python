@@ -1,6 +1,7 @@
 import mne
 import matplotlib.pyplot as plt
 import pandas as pd
+from pathlib import Path
 
 
 def plot_response(signal, argument):
@@ -50,14 +51,14 @@ def detect_bad_ch(eeg):
 
 # define path and filename
 filename = "sleep_sd1020_eyes_closed2_060219.vhdr"
-filepath = "/home/benjamin/Downloads/sd1020/"
-file = filepath + filename
+filepath = Path("/home/benjamin/Downloads/sd1020/")
+file = filepath / filename
 
 
 # 1. load data
 data = mne.io.read_raw_brainvision(file)
 data.load_data()
-#plot_response(data, 'time')
+# plot_response(data, 'time')
 
 
 # 2. TMS-artifact interpolation!!!!
@@ -66,13 +67,13 @@ data.load_data()
 # 3. resample (with low-pass filter)
 new_sampling = 500
 data_sampled = data.copy().resample(new_sampling, npad='auto')
-#plot_response(data_sampled, ['time', 'psd'])
+# plot_response(data_sampled, ['time', 'psd'])
 
 
 # 4. filter (first high- then low-pass)
 l_cut, h_cut = 0.5, 40
 data_filtered = data_sampled.copy().filter(l_freq=l_cut, h_freq=h_cut)
-#plot_response(data_filtered, 'psd')
+# plot_response(data_filtered, 'psd')
 
 
 # 5. channel info (remove EMG and set type for EOG channels)
@@ -93,7 +94,7 @@ plot_response(data_interp, 'butter')
 
 
 # 8. re-reference to average
-data_reref = data_interp.copy().set_eeg_reference('average', projection=False)  # for reasons you might want to go with True
+data_reref = data_interp.copy().set_eeg_reference('average', projection=False)  # you might want to go with True
 
 
 # 9. PCA (optional)
