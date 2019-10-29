@@ -4,6 +4,12 @@ import pandas as pd
 from pathlib import Path
 
 
+# define path and filename
+filename = "sleep_sd1020_eyes_closed2_060219.vhdr"
+filepath = Path("/home/benjamin/Downloads/sd1020/")
+file = filepath / filename
+
+
 def plot_response(signal, argument):
     """plot response to check what happened with the data"""
     if "time" in argument:
@@ -35,7 +41,7 @@ def detect_bad_ch(eeg):
         ax1 = plt.subplot2grid((3, 3), (0, 0), colspan=1)
         ax2 = plt.subplot2grid((3, 3), (0, 1), colspan=2, rowspan=3)
         ax1.psd(time_data, new_sampling, new_sampling)
-        ax1.set_xlim([0, 100])
+        ax1.set_xlim([0, 55])
         ax2.plot(df, 'b')
         plt.show()
 
@@ -49,10 +55,23 @@ def detect_bad_ch(eeg):
     return good_ch, bad_ch
 
 
-# define path and filename
-filename = "sleep_sd1020_eyes_closed2_060219.vhdr"
-filepath = Path("/home/benjamin/Downloads/sd1020/")
-file = filepath / filename
+def detect_bad_ic(ica_data):
+    """plots each independent component so user can decide whether good (mouse click) or bad (enter / space)"""
+    good_ic, bad_ic, bad_list = [], [], []
+
+    for c in ica_data.ch_names:
+        """loop over each channel and plot to decide if bad"""
+        ica_data.plot_properties(inst=data_reref, picks=c)
+
+        if not plt.waitforbuttonpress():
+            good_ic.append(c)
+            plt.close()
+        else:
+            bad_ic.append(c)
+            plt.close()
+
+    [bad_list.append(ica_data.ch_names.index(ci)) for ci in bad]
+    return bad_list
 
 
 # 1. load data
@@ -71,7 +90,7 @@ data_sampled = data.copy().resample(new_sampling, npad='auto')
 
 
 # 4. filter (first high- then low-pass)
-l_cut, h_cut = 0.5, 40
+l_cut, h_cut = 0.5, 80
 data_filtered = data_sampled.copy().filter(l_freq=l_cut, h_freq=h_cut)
 # plot_response(data_filtered, 'psd')
 
@@ -89,18 +108,24 @@ data_channel.info['bads'] = bad  # keep track of bad channels but do not remove 
 
 
 # 7. interpolate channels (spherical spline method recommended)
-data_interp = data_channel.copy().interpolate_bads(reset_bads=True)  # for presentation of bad channels change to False
-plot_response(data_interp, 'butter')
+data_interp = data_channel.copy().interpolate_bads(reset_bads=False)  # for presentation of bad channels change to False
+# plot_response(data_interp, 'butter')
 
 
 # 8. re-reference to average
 data_reref = data_interp.copy().set_eeg_reference('average', projection=False)  # you might want to go with True
 
 
-# 9. PCA (optional)
+# 9. PCA + ICA (by default if rank violated)
+ica = mne.preprocessing.ICA(method='infomax', fit_params=dict(extended=True))
+ica.fit(data_reref)
 
+ica.plot_components(inst=data_reref)  # show all components interactive (slow)
 
-# 10. ICA
+# loop through each channel (faster):
+ica.exclude = detect_bad_ic(ica)
+clean_data = data_reref.copy()
+ica.apply(clean_data)
 
 
 """create sine wave for fun"""
