@@ -1,10 +1,12 @@
-import mne
+import mne, scipy
 import matplotlib.pyplot as plt
 import pandas as pd
+import numpy as np
 from pathlib import Path
+from scipy.integrate import simps
 
 
-# define path and filename
+# define path and filename (here you might want to loop over datasets!)
 filename = "sleep_sd1020_eyes_closed2_060219.vhdr"
 filepath = Path("/home/benjamin/Downloads/sd1020/")
 file = filepath / filename
@@ -18,6 +20,8 @@ def plot_response(signal, argument):
         signal.plot_psd(fmin=0, fmax=80)
     if "butter" in argument:
         signal.plot(butterfly=True, color='#00000044', bad_color='r')
+    if "ica" in argument:
+        signal.plot_components()
 
 
 def detect_bad_ch(eeg):
@@ -74,25 +78,31 @@ def detect_bad_ic(ica_data):
     return bad_list
 
 
-# 1. load data
+# 1. load data (vhdr file)
 data = mne.io.read_raw_brainvision(file)
 data.load_data()
 # plot_response(data, 'time')
 
 
-# 2. TMS-artifact interpolation!!!!
+# 2. TMS-artifact interpolation!!!! (here you want to remove the TMS artifact and interpolate the missing samples)
 
 
-# 3. resample (with low-pass filter)
-new_sampling = 500
+# 3. resample (with low-pass filter!)
+new_sampling = 1000
 data_sampled = data.copy().resample(new_sampling, npad='auto')
 # plot_response(data_sampled, ['time', 'psd'])
 
 
-# 4. filter (first high- then low-pass)
-l_cut, h_cut = 0.5, 80
+# 4. filter (first high- then low-pass; notch-filter?)
+l_cut, h_cut = 1, 80
 data_filtered = data_sampled.copy().filter(l_freq=l_cut, h_freq=h_cut)
 # plot_response(data_filtered, 'psd')
+
+# remove line-noise by notch filter (not always recommended!)
+# data_filtered.notch_filter(freqs=np.arange(50, h_cut, 50))
+
+# remove line-noise by sinusoidal fit (takes longer but worth it!)
+test = data_filtered.copy().notch_filter(freqs=np.arange(50, h_cut, 50), method='spectrum_fit', p_value=0.05)
 
 
 # 5. channel info (remove EMG and set type for EOG channels)
@@ -126,6 +136,25 @@ ica.plot_components(inst=data_reref)  # show all components interactive (slow)
 ica.exclude = detect_bad_ic(ica)
 clean_data = data_reref.copy()
 ica.apply(clean_data)
+
+
+# 10. Compute power
+#
+# 1st: Area under the curve in Welch transform)
+f_power = [8, 12]
+win = 2 * ica.info['sfreq'].__int__()  # 2s window
+freqs, psd = scipy.signal.welch(ica._data, ica.info['sfreq'].__int__(), nperseg=win)
+freq_res = freqs[1] - freqs[0]
+idx_power = np.logical_and(freqs >= f_power[0], freqs <= f_power[1])
+
+# absolute power for each channel
+power = []
+[power.append(simps(psd[i][idx_power], dx=freq_res)) for i in range(psd.shape[0])]
+
+
+# 2nd: bandpass filter and squaring (be carefull with epochs)
+
+# 3rd: Complex Morlet Wavelet transform
 
 
 """create sine wave for fun"""
