@@ -1,4 +1,5 @@
-import mne, scipy
+import mne
+import scipy
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
@@ -59,13 +60,13 @@ def detect_bad_ch(eeg):
     return good_ch, bad_ch
 
 
-def detect_bad_ic(ica_data):
+def detect_bad_ic(ica_data, data_orig):
     """plots each independent component so user can decide whether good (mouse click) or bad (enter / space)"""
     good_ic, bad_ic, bad_list = [], [], []
 
-    for c in ica_data.ch_names:
+    for c in range(ica_data.get_components().shape[0]):
         """loop over each channel and plot to decide if bad"""
-        ica_data.plot_properties(inst=data_reref, picks=c)
+        ica_data.plot_properties(inst=data_orig, picks=c)
 
         if not plt.waitforbuttonpress():
             good_ic.append(c)
@@ -89,67 +90,68 @@ data.load_data()
 
 # 3. resample (with low-pass filter!)
 new_sampling = 1000
-data_sampled = data.copy().resample(new_sampling, npad='auto')
-# plot_response(data_sampled, ['time', 'psd'])
+data.resample(new_sampling, npad='auto')
+# plot_response(data, ['time', 'psd'])
 
 
 # 4. filter (first high- then low-pass; notch-filter?)
 l_cut, h_cut = 1, 80
-data_filtered = data_sampled.copy().filter(l_freq=l_cut, h_freq=h_cut)
-# plot_response(data_filtered, 'psd')
+data.filter(l_freq=l_cut, h_freq=h_cut)
+# plot_response(data, 'psd')
 
 # remove line-noise by notch filter (not always recommended!)
-# data_filtered.notch_filter(freqs=np.arange(50, h_cut, 50))
+data.notch_filter(freqs=np.arange(50, h_cut, 50))
 
 # remove line-noise by sinusoidal fit (takes longer but worth it!)
-test = data_filtered.copy().notch_filter(freqs=np.arange(50, h_cut, 50), method='spectrum_fit', p_value=0.05)
+# data.notch_filter(freqs=[50], method='spectrum_fit', p_value=1)
 
 
 # 5. channel info (remove EMG and set type for EOG channels)
-data_filtered.drop_channels('EMG1')
-data_filtered.set_channel_types({'VEOGl': 'eog', 'VEOGu': 'eog'})
-data_channel = data_filtered.copy().set_montage('standard_1005')
+data.drop_channels('EMG1')
+data.set_channel_types({'VEOGl': 'eog', 'VEOGu': 'eog'})
+data.set_montage('standard_1005')
 
 
 # 6. remove bad channels (or do not remove but track them)
-good, bad = detect_bad_ch(data_channel)
-data_channel.info['bads'] = bad  # keep track of bad channels but do not remove (MNE style)
-# data_channel = data_channel.copy().drop_channels(bad)  # remove bad channels (eeglab style)
+good, bad = detect_bad_ch(data)
+data.info['bads'] = bad  # keep track of bad channels but do not remove (MNE style)
+# data.drop_channels(bad)  # remove bad channels (eeglab style)
 
 
 # 7. interpolate channels (spherical spline method recommended)
-data_interp = data_channel.copy().interpolate_bads(reset_bads=False)  # for presentation of bad channels change to False
-# plot_response(data_interp, 'butter')
+data = data.interpolate_bads(reset_bads=True)  # for presentation of bad channels change to False
+# plot_response(data, 'butter')
 
 
 # 8. re-reference to average
-data_reref = data_interp.copy().set_eeg_reference('average', projection=False)  # you might want to go with True
+data.set_eeg_reference('average', projection=False)  # you might want to go with True
 
 
 # 9. PCA + ICA (by default if rank violated)
-ica = mne.preprocessing.ICA(method='infomax', fit_params=dict(extended=True))
-ica.fit(data_reref)
+n_ic = data._data.shape[0]-len(bad)
+ica = mne.preprocessing.ICA(method='infomax', fit_params=dict(extended=True), max_pca_components=n_ic)
+ica.fit(data, picks=['eeg', 'eog'])
 
-ica.plot_components(inst=data_reref)  # show all components interactive (slow)
+# ica.plot_components(inst=data_reref)  # show all components interactive (slow)
 
 # loop through each channel (faster):
-ica.exclude = detect_bad_ic(ica)
-clean_data = data_reref.copy()
+ica.exclude = detect_bad_ic(ica, data)
+clean_data = data.copy()
 ica.apply(clean_data)
 
 
 # 10. Compute power
 #
 # 1st: Area under the curve in Welch transform)
-f_power = [8, 12]
-win = 2 * ica.info['sfreq'].__int__()  # 2s window
-freqs, psd = scipy.signal.welch(ica._data, ica.info['sfreq'].__int__(), nperseg=win)
-freq_res = freqs[1] - freqs[0]
-idx_power = np.logical_and(freqs >= f_power[0], freqs <= f_power[1])
-
-# absolute power for each channel
-power = []
-[power.append(simps(psd[i][idx_power], dx=freq_res)) for i in range(psd.shape[0])]
+# f_power = [8, 12]
+# win = 2 * clean_data.info['sfreq'].__int__()  # 2s window
+# freqs, psd = scipy.signal.welch(ica._data, ica.info['sfreq'].__int__(), nperseg=win)
+# freq_res = freqs[1] - freqs[0]
+# idx_power = np.logical_and(freqs >= f_power[0], freqs <= f_power[1])
+#
+# # absolute power for each channel
+# power = []
+# [power.append(simps(psd[i][idx_power], dx=freq_res)) for i in range(psd.shape[0])]
 
 
 # 2nd: bandpass filter and squaring (be carefull with epochs)
