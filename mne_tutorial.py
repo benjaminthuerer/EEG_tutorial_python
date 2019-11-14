@@ -62,7 +62,8 @@ def detect_bad_ch(eeg):
 
 def detect_bad_ic(ica_data, data_orig):
     """plots each independent component so user can decide whether good (mouse click) or bad (enter / space)"""
-    good_ic, bad_ic, bad_list = [], [], []
+    good_ic, bad_ic = [], []
+    bad_list = []
 
     for c in range(ica_data.get_components().shape[0]):
         """loop over each channel and plot to decide if bad"""
